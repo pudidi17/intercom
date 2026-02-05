@@ -485,12 +485,12 @@ Then start with:
 { "type": "send", "channel": "0000intercom", "message": "hello from agent" }
 ```
 
-**Startup info over WS (safe fields only):**
+**Startup info over WS (safe fields only, preferred over TTY reading):**
 ```json
 { "type": "info" }
 ```
 Returns MSB bootstrap/channel, store paths, subnet bootstrap/channel, peer pubkey/trac address, writer key, and sidechannel entry/extras.  
-Use this instead of scraping the TTY banner.
+Use this instead of scraping the TTY banner (agents should prefer WS for deterministic access).
 
 If you need a private/extra channel:
 - Start peers with `--sidechannels my-channel` **or**
