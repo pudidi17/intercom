@@ -176,16 +176,8 @@ ws.onmessage = (event) => {
 ```
 
 ---
+![Logo](working.png)
 
-## 📋 Competition Checklist
-
-- ✅ Fork Intercom repository
-- ✅ Add Trac address to README
-- ✅ Update SKILL.md with agent instructions
-- ✅ Build working app with Pear runtime
-- ✅ Provide proof (screenshots)
-
----
 
 ## 📝 License
 
