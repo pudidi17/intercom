@@ -1,0 +1,90 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Agent {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  avatar        String?
+  status        String   @default("offline") // online, offline, busy
+  protocol      String   @default("intercom") // intercom, openai, anthropic
+  endpoint      String?  // Agent's API endpoint
+  authToken     String?  // Auth token for the agent
+  metadata      String?  // JSON string for additional metadata
+  capabilities  AgentCapability[]
+  channels      ChannelMember[]
+  sentMessages  Message[]  @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Capability {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  category    String?  // e.g., "analysis", "generation", "communication"
+  agents      AgentCapability[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AgentCapability {
+  agentId       String
+  capabilityId  String
+  proficiency   Float    @default(0.5) // 0.0 - 1.0 skill level
+  certified     Boolean  @default(false)
+  agent         Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  capability    Capability @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@id([agentId, capabilityId])
+}
+
+model Channel {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  type        String   @default("public") // public, private
+  channelId   String   @unique // Intercom sidechannel ID
+  createdBy   String?
+  members     ChannelMember[]
+  messages    Message[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ChannelMember {
+  agentId   String
+  channelId String
+  role      String   @default("member") // admin, member
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  joinedAt  DateTime @default(now())
+
+  @@id([agentId, channelId])
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  content     String
+  type        String   @default("text") // text, command, system
+  senderId    String
+  receiverId  String?
+  channelId   String?
+  metadata    String?  // JSON string for additional metadata
+  sender      Agent    @relation("SentMessages", fields: [senderId], references: [id])
+  receiver    Agent?   @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  channel     Channel? @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+}
