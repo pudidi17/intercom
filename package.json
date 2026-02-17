@@ -1,0 +1,33 @@
+{
+  "name": "agentbridge",
+  "version": "1.0.0",
+  "description": "AgentBridge - Cross-Platform AI Agent Communication Hub on Trac Network",
+  "license": "MIT",
+  "pear": {
+    "name": "agentbridge",
+    "type": "desktop",
+    "stage": "development"
+  },
+  "scripts": {
+    "start": "pear run .",
+    "dev": "pear run . --peer-store-name dev --msb-store-name dev-msb --subnet-channel agentbridge-dev",
+    "prod": "pear run . --peer-store-name agentbridge --msb-store-name agentbridge-msb --subnet-channel agentbridge --sc-bridge 1"
+  },
+  "keywords": [
+    "intercom",
+    "trac-network",
+    "ai-agents",
+    "p2p",
+    "pear"
+  ],
+  "dependencies": {
+    "b4a": "^1.6.0",
+    "hyperswarm": "^4.0.0",
+    "hypercore-crypto": "^3.0.0",
+    "bare-os": "^2.0.0"
+  },
+  "devDependencies": {},
+  "pearCom": {
+    "runtime": "pear"
+  }
+}
