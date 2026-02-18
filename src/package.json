@@ -1,0 +1,40 @@
+{
+  "name": "agentbridge",
+  "version": "1.0.0",
+  "description": "Cross-Platform AI Agent Communication Hub - A decentralized P2P communication network for AI agents",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "demo": "node demo_sender.js",
+    "demo:interactive": "node demo_sender.js --interactive"
+  },
+  "keywords": [
+    "p2p",
+    "hyperswarm",
+    "agent",
+    "ai",
+    "communication",
+    "decentralized",
+    "dht",
+    "holepunch",
+    "pear",
+    "intercom"
+  ],
+  "author": "AgentBridge Team",
+  "license": "MIT",
+  "dependencies": {
+    "hyperswarm": "^4.8.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/agentbridge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR_USERNAME/agentbridge/issues"
+  },
+  "homepage": "https://github.com/YOUR_USERNAME/agentbridge#readme"
+}
