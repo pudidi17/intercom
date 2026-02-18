@@ -1,582 +1,240 @@
-/**
- * AgentBridge Contract
- * 
- * This contract manages the AgentBridge communication hub on Trac Network.
- * It handles:
- * - Agent registration and profiles
- * - Capability tracking and verification
- * - Matchmaking requests and proposals
- * - Channel membership and policies
- * - Reputation scoring
- */
+import {Contract} from 'trac-peer'
 
-module.exports = {
-  name: 'agentbridge',
-  version: '1.0.0',
-  
-  // Initial state
-  state: {
-    // Agent registry: agentId -> agent profile
-    agents: {},
-    
-    // Capability registry: capability name -> list of agent IDs
-    capabilityIndex: {},
-    
-    // Active matchmaking requests: matchId -> request
-    matchRequests: {},
-    
-    // Match proposals: matchId -> proposal
-    matchProposals: {},
-    
-    // Channel membership: channelId -> member list
-    channelMembers: {},
-    
-    // Agent reputation: agentId -> reputation data
-    reputation: {},
-    
-    // Statistics
-    stats: {
-      totalAgents: 0,
-      totalMatches: 0,
-      successfulMatches: 0,
-      totalChannels: 0,
-      totalMessages: 0
-    }
-  },
-  
-  // State handlers
-  handlers: {
+class SampleContract extends Contract {
     /**
-     * Register a new agent
-     * @param {Object} state - Current state
-     * @param {Object} payload - { name, description, capabilities, protocol, visibility, endpoint }
-     * @param {Object} context - { writer, timestamp }
-     * @returns {Object} New state
+     * Extending from Contract inherits its capabilities and allows you to define your own contract.
+     * The contract supports the corresponding protocol. Both files come in pairs.
+     *
+     * Instances of this class run in contract context. The constructor is only called once on Peer
+     * instantiation.
+     *
+     * Please avoid using the following in your contract functions:
+     *
+     * No try-catch
+     * No throws
+     * No random values
+     * No http / api calls
+     * No super complex, costly calculations
+     * No massive storage of data.
+     * Never, ever modify "this.op" or "this.value", only read from it and use safeClone to modify.
+     * ... basically nothing that can lead to inconsistencies akin to Blockchain smart contracts.
+     *
+     * Running a contract on Trac gives you a lot of freedom, but it comes with additional responsibility.
+     * Make sure to benchmark your contract performance before release.
+     *
+     * If you need to inject data from "outside", you can utilize the Feature class and create your own
+     * oracles. Instances of Feature can be injected into the main Peer instance and enrich your contract.
+     *
+     * In the current version (Release 1), there is no inter-contract communication yet.
+     * This means it's not suitable yet for token standards.
+     * However, it's perfectly equipped for interoperability or standalone tasks.
+     *
+     * this.protocol: the peer's instance of the protocol managing contract concerns outside of its execution.
+     * this.options: the option stack passed from Peer instance
+     *
+     * @param protocol
+     * @param options
      */
-    agent_register(state, payload, context) {
-      const { name, description, capabilities = [], protocol = 'intercom', visibility = 'public', endpoint } = payload;
-      const { writer, timestamp } = context;
-      
-      // Validate required fields
-      if (!name || typeof name !== 'string') {
-        throw new Error('Agent name is required');
-      }
-      
-      // Check for duplicate name
-      const existingAgent = Object.values(state.agents).find(a => a.name === name);
-      if (existingAgent) {
-        throw new Error('Agent name already registered');
-      }
-      
-      // Generate agent ID from writer key
-      const agentId = writer;
-      
-      // Create agent profile
-      const agent = {
-        id: agentId,
-        name,
-        description: description || '',
-        capabilities: capabilities.map(cap => ({
-          name: cap.name,
-          proficiency: Math.min(1, Math.max(0, cap.proficiency || 0.5)),
-          certified: cap.certified || false,
-          certifiedBy: cap.certified ? writer : null,
-          certifiedAt: cap.certified ? timestamp : null
-        })),
-        protocol,
-        visibility,
-        endpoint: endpoint || null,
-        status: 'online',
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        matchCount: 0,
-        successCount: 0
-      };
-      
-      // Update state
-      const newState = { ...state };
-      newState.agents[agentId] = agent;
-      
-      // Update capability index
-      for (const cap of capabilities) {
-        if (!newState.capabilityIndex[cap.name]) {
-          newState.capabilityIndex[cap.name] = [];
-        }
-        if (!newState.capabilityIndex[cap.name].includes(agentId)) {
-          newState.capabilityIndex[cap.name].push(agentId);
-        }
-      }
-      
-      // Update stats
-      newState.stats = { ...state.stats };
-      newState.stats.totalAgents++;
-      
-      return {
-        ...newState,
-        _event: {
-          type: 'agent_registered',
-          agentId,
-          agent
-        }
-      };
-    },
-    
-    /**
-     * Update agent profile
-     * @param {Object} state - Current state
-     * @param {Object} payload - { status?, capabilities?, visibility?, endpoint? }
-     * @param {Object} context - { writer, timestamp }
-     * @returns {Object} New state
-     */
-    agent_update(state, payload, context) {
-      const { status, capabilities, visibility, endpoint } = payload;
-      const { writer, timestamp } = context;
-      
-      const agentId = writer;
-      const existingAgent = state.agents[agentId];
-      
-      if (!existingAgent) {
-        throw new Error('Agent not registered');
-      }
-      
-      const newState = { ...state };
-      const updatedAgent = { ...existingAgent };
-      
-      // Update status
-      if (status && ['online', 'offline', 'busy'].includes(status)) {
-        updatedAgent.status = status;
-      }
-      
-      // Update capabilities
-      if (capabilities && Array.isArray(capabilities)) {
-        // Remove old capability index entries
-        for (const cap of updatedAgent.capabilities) {
-          const idx = newState.capabilityIndex[cap.name]?.indexOf(agentId);
-          if (idx > -1) {
-            newState.capabilityIndex[cap.name].splice(idx, 1);
-          }
-        }
-        
-        // Set new capabilities
-        updatedAgent.capabilities = capabilities.map(cap => ({
-          name: cap.name,
-          proficiency: Math.min(1, Math.max(0, cap.proficiency || 0.5)),
-          certified: cap.certified || false
-        }));
-        
-        // Add new capability index entries
-        newState.capabilityIndex = { ...state.capabilityIndex };
-        for (const cap of capabilities) {
-          if (!newState.capabilityIndex[cap.name]) {
-            newState.capabilityIndex[cap.name] = [];
-          }
-          if (!newState.capabilityIndex[cap.name].includes(agentId)) {
-            newState.capabilityIndex[cap.name].push(agentId);
-          }
-        }
-      }
-      
-      // Update visibility
-      if (visibility && ['public', 'private'].includes(visibility)) {
-        updatedAgent.visibility = visibility;
-      }
-      
-      // Update endpoint
-      if (endpoint !== undefined) {
-        updatedAgent.endpoint = endpoint;
-      }
-      
-      updatedAgent.updatedAt = timestamp;
-      newState.agents[agentId] = updatedAgent;
-      
-      return {
-        ...newState,
-        _event: {
-          type: 'agent_updated',
-          agentId,
-          updates: payload
-        }
-      };
-    },
-    
-    /**
-     * Unregister an agent
-     * @param {Object} state - Current state
-     * @param {Object} payload - {}
-     * @param {Object} context - { writer, timestamp }
-     * @returns {Object} New state
-     */
-    agent_unregister(state, payload, context) {
-      const { writer } = context;
-      const agentId = writer;
-      
-      const existingAgent = state.agents[agentId];
-      if (!existingAgent) {
-        throw new Error('Agent not registered');
-      }
-      
-      const newState = { ...state };
-      
-      // Remove from capability index
-      for (const cap of existingAgent.capabilities) {
-        const idx = newState.capabilityIndex[cap.name]?.indexOf(agentId);
-        if (idx > -1) {
-          newState.capabilityIndex[cap.name].splice(idx, 1);
-        }
-      }
-      
-      // Remove agent
-      delete newState.agents[agentId];
-      
-      // Update stats
-      newState.stats = { ...state.stats };
-      newState.stats.totalAgents--;
-      
-      return {
-        ...newState,
-        _event: {
-          type: 'agent_unregistered',
-          agentId
-        }
-      };
-    },
-    
-    /**
-     * Create a matchmaking request
-     * @param {Object} state - Current state
-     * @param {Object} payload - { requiredCapabilities, minScore, taskDescription, ttl, preferredProtocols }
-     * @param {Object} context - { writer, timestamp }
-     * @returns {Object} New state
-     */
-    match_create(state, payload, context) {
-      const { requiredCapabilities = [], minScore = 0.5, taskDescription, ttl = 300, preferredProtocols = [] } = payload;
-      const { writer, timestamp } = context;
-      
-      if (requiredCapabilities.length === 0) {
-        throw new Error('At least one required capability is needed');
-      }
-      
-      const matchId = `match-${writer.slice(0, 8)}-${timestamp}`;
-      const expiresAt = timestamp + (ttl * 1000);
-      
-      const request = {
-        id: matchId,
-        requesterId: writer,
-        requiredCapabilities,
-        minScore,
-        taskDescription: taskDescription || '',
-        preferredProtocols,
-        expiresAt,
-        createdAt: timestamp,
-        status: 'pending'
-      };
-      
-      const newState = { ...state };
-      newState.matchRequests = { ...state.matchRequests };
-      newState.matchRequests[matchId] = request;
-      
-      // Update stats
-      newState.stats = { ...state.stats };
-      newState.stats.totalMatches++;
-      
-      return {
-        ...newState,
-        _event: {
-          type: 'match_request_created',
-          matchId,
-          request
-        }
-      };
-    },
-    
-    /**
-     * Propose a match (called by potential match agents)
-     * @param {Object} state - Current state
-     * @param {Object} payload - { matchId, score, matchedCapabilities }
-     * @param {Object} context - { writer, timestamp }
-     * @returns {Object} New state
-     */
-    match_propose(state, payload, context) {
-      const { matchId, score, matchedCapabilities } = payload;
-      const { writer, timestamp } = context;
-      
-      const request = state.matchRequests[matchId];
-      if (!request) {
-        throw new Error('Match request not found');
-      }
-      
-      if (timestamp > request.expiresAt) {
-        throw new Error('Match request expired');
-      }
-      
-      if (request.status !== 'pending') {
-        throw new Error('Match request no longer pending');
-      }
-      
-      const proposerAgent = state.agents[writer];
-      if (!proposerAgent) {
-        throw new Error('Proposer agent not registered');
-      }
-      
-      const proposal = {
-        matchId,
-        proposerId: writer,
-        score: Math.min(1, Math.max(0, score)),
-        matchedCapabilities,
-        proposedAt: timestamp,
-        status: 'proposed'
-      };
-      
-      const newState = { ...state };
-      newState.matchProposals = { ...state.matchProposals };
-      newState.matchProposals[`${matchId}-${writer}`] = proposal;
-      
-      return {
-        ...newState,
-        _event: {
-          type: 'match_proposed',
-          matchId,
-          proposal
-        }
-      };
-    },
-    
-    /**
-     * Accept a match proposal
-     * @param {Object} state - Current state
-     * @param {Object} payload - { matchId, proposerId }
-     * @param {Object} context - { writer, timestamp }
-     * @returns {Object} New state
-     */
-    match_accept(state, payload, context) {
-      const { matchId, proposerId } = payload;
-      const { writer, timestamp } = context;
-      
-      const request = state.matchRequests[matchId];
-      if (!request) {
-        throw new Error('Match request not found');
-      }
-      
-      if (request.requesterId !== writer) {
-        throw new Error('Only the request creator can accept proposals');
-      }
-      
-      const proposalKey = `${matchId}-${proposerId}`;
-      const proposal = state.matchProposals[proposalKey];
-      if (!proposal) {
-        throw new Error('Proposal not found');
-      }
-      
-      // Update request status
-      const newState = { ...state };
-      newState.matchRequests = { ...state.matchRequests };
-      newState.matchRequests[matchId] = {
-        ...request,
-        status: 'accepted',
-        acceptedWith: proposerId,
-        acceptedAt: timestamp
-      };
-      
-      // Update proposal status
-      newState.matchProposals = { ...state.matchProposals };
-      newState.matchProposals[proposalKey] = {
-        ...proposal,
-        status: 'accepted'
-      };
-      
-      // Update agent match counts
-      newState.agents = { ...state.agents };
-      const requester = newState.agents[writer];
-      const proposer = newState.agents[proposerId];
-      
-      if (requester) {
-        newState.agents[writer] = {
-          ...requester,
-          matchCount: requester.matchCount + 1
-        };
-      }
-      
-      if (proposer) {
-        newState.agents[proposerId] = {
-          ...proposer,
-          matchCount: proposer.matchCount + 1
-        };
-      }
-      
-      return {
-        ...newState,
-        _event: {
-          type: 'match_accepted',
-          matchId,
-          requesterId: writer,
-          proposerId,
-          channel: `match-${matchId}`
-        }
-      };
-    },
-    
-    /**
-     * Complete a match and update reputation
-     * @param {Object} state - Current state
-     * @param {Object} payload - { matchId, success, rating, feedback }
-     * @param {Object} context - { writer, timestamp }
-     * @returns {Object} New state
-     */
-    match_complete(state, payload, context) {
-      const { matchId, success = true, rating, feedback } = payload;
-      const { writer, timestamp } = context;
-      
-      const request = state.matchRequests[matchId];
-      if (!request) {
-        throw new Error('Match request not found');
-      }
-      
-      const newState = { ...state };
-      
-      // Update request status
-      newState.matchRequests = { ...state.matchRequests };
-      newState.matchRequests[matchId] = {
-        ...request,
-        status: 'completed',
-        completedAt: timestamp,
-        success,
-        rating,
-        feedback
-      };
-      
-      // Update stats
-      newState.stats = { ...state.stats };
-      if (success) {
-        newState.stats.successfulMatches++;
-      }
-      
-      // Update reputation
-      if (rating && request.acceptedWith) {
-        newState.reputation = { ...state.reputation };
-        const targetId = writer === request.requesterId ? request.acceptedWith : request.requesterId;
-        
-        if (!newState.reputation[targetId]) {
-          newState.reputation[targetId] = {
-            totalRatings: 0,
-            averageRating: 0,
-            ratings: []
-          };
-        }
-        
-        const rep = newState.reputation[targetId];
-        rep.ratings.push({
-          rating,
-          from: writer,
-          matchId,
-          timestamp
+    constructor(protocol, options = {}) {
+        // calling super and passing all parameters is required.
+        super(protocol, options);
+
+        // simple function registration.
+        // since this function does not expect value payload, no need to sanitize.
+        // note that the function must match the type as set in Protocol.mapTxCommand()
+        this.addFunction('storeSomething');
+
+        // now we register the function with a schema to prevent malicious inputs.
+        // the contract uses the schema generator "fastest-validator" and can be found on npmjs.org.
+        //
+        // Since this is the "value" as of Protocol.mapTxCommand(), we must take it full into account.
+        // $$strict : true tells the validator for the object structure to be precise after "value".
+        //
+        // note that the function must match the type as set in Protocol.mapTxCommand()
+        this.addSchema('submitSomething', {
+            value : {
+                $$strict : true,
+                $$type: "object",
+                op : { type : "string", min : 1, max: 128 },
+                some_key : { type : "string", min : 1, max: 128 }
+            }
         });
-        rep.totalRatings++;
-        rep.averageRating = rep.ratings.reduce((sum, r) => sum + r.rating, 0) / rep.totalRatings;
-        
-        // Update agent success count
-        if (success && newState.agents[targetId]) {
-          newState.agents = { ...state.agents };
-          newState.agents[targetId] = {
-            ...newState.agents[targetId],
-            successCount: newState.agents[targetId].successCount + 1
-          };
-        }
-      }
-      
-      return {
-        ...newState,
-        _event: {
-          type: 'match_completed',
-          matchId,
-          success,
-          rating
-        }
-      };
-    },
-    
-    /**
-     * Join a channel
-     * @param {Object} state - Current state
-     * @param {Object} payload - { channelId }
-     * @param {Object} context - { writer, timestamp }
-     * @returns {Object} New state
-     */
-    channel_join(state, payload, context) {
-      const { channelId } = payload;
-      const { writer, timestamp } = context;
-      
-      const agent = state.agents[writer];
-      if (!agent) {
-        throw new Error('Agent not registered');
-      }
-      
-      const newState = { ...state };
-      newState.channelMembers = { ...state.channelMembers };
-      
-      if (!newState.channelMembers[channelId]) {
-        newState.channelMembers[channelId] = [];
-        newState.stats = { ...state.stats };
-        newState.stats.totalChannels++;
-      }
-      
-      if (!newState.channelMembers[channelId].includes(writer)) {
-        newState.channelMembers[channelId].push(writer);
-      }
-      
-      return {
-        ...newState,
-        _event: {
-          type: 'channel_joined',
-          channelId,
-          agentId: writer
-        }
-      };
-    },
-    
-    /**
-     * Leave a channel
-     * @param {Object} state - Current state
-     * @param {Object} payload - { channelId }
-     * @param {Object} context - { writer, timestamp }
-     * @returns {Object} New state
-     */
-    channel_leave(state, payload, context) {
-      const { channelId } = payload;
-      const { writer } = context;
-      
-      const newState = { ...state };
-      newState.channelMembers = { ...state.channelMembers };
-      
-      if (newState.channelMembers[channelId]) {
-        const idx = newState.channelMembers[channelId].indexOf(writer);
-        if (idx > -1) {
-          newState.channelMembers[channelId].splice(idx, 1);
-        }
-      }
-      
-      return {
-        ...newState,
-        _event: {
-          type: 'channel_left',
-          channelId,
-          agentId: writer
-        }
-      };
-    },
-    
-    /**
-     * Record a message (for stats)
-     * @param {Object} state - Current state
-     * @param {Object} payload - { channelId }
-     * @param {Object} context - { writer, timestamp }
-     * @returns {Object} New state
-     */
-    message_record(state, payload, context) {
-      const newState = { ...state };
-      newState.stats = { ...state.stats };
-      newState.stats.totalMessages++;
-      
-      return newState;
+
+        // in preparation to add an external Feature (aka oracle), we add a loose schema to make sure
+        // the Feature key is given properly. it's not required, but showcases that even these can be
+        // sanitized.
+        this.addSchema('feature_entry', {
+            key : { type : "string", min : 1, max: 256 },
+            value : { type : "any" }
+        });
+
+        // read helpers (no state writes)
+        this.addFunction('readSnapshot');
+        this.addFunction('readChatLast');
+        this.addFunction('readTimer');
+        this.addSchema('readKey', {
+            value : {
+                $$strict : true,
+                $$type: "object",
+                op : { type : "string", min : 1, max: 128 },
+                key : { type : "string", min : 1, max: 256 }
+            }
+        });
+
+        // now we are registering the timer feature itself (see /features/time/ in package).
+        // note the naming convention for the feature name <feature-name>_feature.
+        // the feature name is given in app setup, when passing the feature classes.
+        const _this = this;
+
+        // this feature registers incoming data from the Feature and if the right key is given,
+        // stores it into the smart contract storage.
+        // the stored data can then be further used in regular contract functions.
+        this.addFeature('timer_feature', async function(){
+            if(false === _this.check.validateSchema('feature_entry', _this.op)) return;
+            if(_this.op.key === 'currentTime') {
+                if(null === await _this.get('currentTime')) console.log('timer started at', _this.op.value);
+                await _this.put(_this.op.key, _this.op.value);
+            }
+        });
+
+        // last but not least, you may intercept messages from the built-in
+        // chat system, and perform actions similar to features to enrich your
+        // contract. check the _this.op value after you enabled the chat system
+        // and posted a few messages.
+        this.messageHandler(async function(){
+            if(_this.op?.type === 'msg' && typeof _this.op.msg === 'string'){
+                const currentTime = await _this.get('currentTime');
+                await _this.put('chat_last', {
+                    msg: _this.op.msg,
+                    address: _this.op.address ?? null,
+                    at: currentTime ?? null
+                });
+            }
+            console.log('message triggered contract', _this.op);
+        });
     }
-  }
-};
+
+    /**
+     * A simple contract function without values (=no parameters).
+     *
+     * Contract functions must be registered through either "this.addFunction" or "this.addSchema"
+     * or it won't execute upon transactions. "this.addFunction" does not sanitize values, so it should be handled with
+     * care or be used when no payload is to be expected.
+     *
+     * Schema is recommended to sanitize incoming data from the transaction payload.
+     * The type of payload data depends on your protocol.
+     *
+     * This particular function does not expect any payload, so it's fine to be just registered using "this.addFunction".
+     *
+     * However, as you can see below, what it does is checking if an entry for key "something" exists already.
+     * With the very first tx executing it, it will return "null" (default value of this.get if no value found).
+     * From the 2nd tx onwards, it will print the previously stored value "there is something".
+     *
+     * It is recommended to check for null existence before using put to avoid duplicate content.
+     *
+     * As a rule of thumb, all "this.put()" should go at the end of function execution to avoid code security issues.
+     *
+     * Putting data is atomic, should a Peer with a contract interrupt, the put won't be executed.
+     */
+    async storeSomething(){
+        const something = await this.get('something');
+
+        console.log('is there already something?', something);
+
+        if(null === something) {
+            await this.put('something', 'there is something');
+        }
+    }
+
+    /**
+     * Now we are using the schema-validated function defined in the constructor.
+     *
+     * The function also showcases some of the handy features like safe functions
+     * to prevent throws and safe bigint/decimal conversion.
+     */
+    async submitSomething(){
+        // the value of some_key shouldn't be empty, let's check that
+        if(this.value.some_key === ''){
+            return new Error('Cannot be empty');
+            // alternatively false for generic errors:
+            // return false;
+        }
+
+        // of course the same works with assert (always use this.assert)
+        this.assert(this.value.some_key !== '', new Error('Cannot be empty'));
+
+        // btw, please use safeBigInt provided by the contract protocol's superclass
+        // to calculate big integers:
+        const bigint = this.protocol.safeBigInt("1000000000000000000");
+
+        // making sure it didn't fail
+        this.assert(bigint !== null);
+
+        // you can also convert a bigint string into its decimal representation (as string)
+        const decimal = this.protocol.fromBigIntString(bigint.toString(), 18);
+
+        // and back into a bigint string
+        const bigint_string = this.protocol.toBigIntString(decimal, 18);
+
+        // let's clone the value
+        const cloned = this.protocol.safeClone(this.value);
+
+        // we want to pass the time from the timer feature.
+        // since mmodifications of this.value is not allowed, add this to the clone instead for storing:
+        cloned['timestamp'] = await this.get('currentTime');
+
+        // making sure it didn't fail (be aware of false-positives if null is passed to safeClone)
+        this.assert(cloned !== null);
+
+        // and now let's stringify the cloned value
+        const stringified = this.protocol.safeJsonStringify(cloned);
+
+        // and, you guessed it, best is to assert against null once more
+        this.assert(stringified !== null);
+
+        // and guess we are parsing it back
+        const parsed = this.protocol.safeJsonParse(stringified);
+
+        // parsing the json is a bit different: instead of null, we check against undefined:
+        this.assert(parsed !== undefined);
+
+        // finally we are storing what address submitted the tx and what the value was
+        await this.put('submitted_by/'+this.address, parsed.some_key);
+
+        // printing into the terminal works, too of course:
+        console.log('submitted by', this.address, parsed);
+    }
+
+    async readSnapshot(){
+        const something = await this.get('something');
+        const currentTime = await this.get('currentTime');
+        const msgl = await this.get('msgl');
+        const msg0 = await this.get('msg/0');
+        const msg1 = await this.get('msg/1');
+        console.log('snapshot', {
+            something,
+            currentTime,
+            msgl: msgl ?? 0,
+            msg0,
+            msg1
+        });
+    }
+
+    async readKey(){
+        const key = this.value?.key;
+        const value = key ? await this.get(key) : null;
+        console.log(`readKey ${key}:`, value);
+    }
+
+    async readChatLast(){
+        const last = await this.get('chat_last');
+        console.log('chat_last:', last);
+    }
+
+    async readTimer(){
+        const currentTime = await this.get('currentTime');
+        console.log('currentTime:', currentTime);
+    }
+}
+
+export default SampleContract;

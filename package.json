@@ -1,33 +1,29 @@
 {
-  "name": "agentbridge",
-  "version": "1.0.0",
-  "description": "AgentBridge - Cross-Platform AI Agent Communication Hub on Trac Network",
-  "license": "MIT",
+  "name": "contract-test-latest",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "index.js",
   "pear": {
-    "name": "agentbridge",
-    "type": "desktop",
-    "stage": "development"
+    "name": "contract-test-latest",
+    "type": "terminal"
   },
-  "scripts": {
-    "start": "pear run .",
-    "dev": "pear run . --peer-store-name dev --msb-store-name dev-msb --subnet-channel agentbridge-dev",
-    "prod": "pear run . --peer-store-name agentbridge --msb-store-name agentbridge-msb --subnet-channel agentbridge --sc-bridge 1"
-  },
-  "keywords": [
-    "intercom",
-    "trac-network",
-    "ai-agents",
-    "p2p",
-    "pear"
-  ],
   "dependencies": {
-    "b4a": "^1.6.0",
-    "hyperswarm": "^4.0.0",
-    "hypercore-crypto": "^3.0.0",
-    "bare-os": "^2.0.0"
+    "b4a": "^1.6.7",
+    "bare-ws": "2.0.3",
+    "compact-encoding": "^2.18.0",
+    "crypto": "npm:bare-node-crypto",
+    "fs": "npm:bare-node-fs",
+    "hyperswarm": "^4.16.0",
+    "install": "^0.13.0",
+    "npm": "^11.10.0",
+    "path": "npm:bare-node-path",
+    "protomux": "^3.10.1",
+    "trac-msb": "git+https://github.com/Trac-Systems/main_settlement_bus.git#5088921",
+    "trac-peer": "git+https://github.com/Trac-Systems/trac-peer.git#d108f52",
+    "trac-wallet": "1.0.1",
+    "util": "npm:bare-node-util"
   },
-  "devDependencies": {},
-  "pearCom": {
-    "runtime": "pear"
+  "overrides": {
+    "trac-wallet": "1.0.1"
   }
 }
